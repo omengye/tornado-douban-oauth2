@@ -13,6 +13,7 @@ class Application(tornado.web.Application):
         handlers = [
             (r"/", HomeHandler),
             (r"/auth/login", AuthLoginHandler),
+            (r"/auth/logout", AuthLogoutHandler),
             ]
         settings = dict(
             blog_title = "test tornado blog",
@@ -22,15 +23,25 @@ class Application(tornado.web.Application):
             douban_api_secret='请填入api secret',
             redirect_uri='http://127.0.0.1:8000/auth/login',
             login_url="/auth/login",
+            cookie_secret="bZBc2sEbQLKqv7GkJD/VB8YuTC3eC0R0kRvJ5/xX37P=",
+            xsrf_cookies=True,
             debug=True,
             )
         tornado.web.Application.__init__(self, handlers, **settings)
 
-class HomeHandler(tornado.web.RequestHandler):
+class BaseHandle(tornado.web.RequestHandler):
+    def get_current_user(self):
+        return self.get_secure_cookie("user_id")
+
+class HomeHandler(BaseHandle):
     @tornado.web.authenticated
     def get(self):
-        self.write("test success")
+        self.write("Auth Success <br> welcome " + self.current_user + "!")
 
+class AuthLogoutHandler(BaseHandle):
+    def get(self):
+        self.clear_cookie("user_id")
+        self.redirect(self.get_argument("next", "/"))
 
 class AuthLoginHandler(DoubanOAuth2Mixin, tornado.web.RequestHandler):
     @tornado.gen.coroutine
@@ -41,14 +52,13 @@ class AuthLoginHandler(DoubanOAuth2Mixin, tornado.web.RequestHandler):
                 code=self.get_argument('code')
             )
             if user:
-                self.write(user)
-            else:
-                self.write("auth error")
+                self.set_secure_cookie("user_id", str(user['uid']))
+                self.redirect(self.get_argument("next", "/"))
         else:
             yield self.authorize_redirect(
                 redirect_uri=self.settings['redirect_uri'],
                 client_id=self.settings['douban_api_key'],
-                scope=None,
+                scope=None, # 使用默认的scope权限
                 response_type='code'
             )
 
